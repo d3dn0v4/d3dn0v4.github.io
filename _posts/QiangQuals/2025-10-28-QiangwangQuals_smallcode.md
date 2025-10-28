@@ -4,7 +4,7 @@ title: "Qiangwang Quals - Smallcode"
 categories: [web, writeups , CTF]
 tags: [unauth file write,environment poisioning,hijacking]
 date: 2025-10-28
-media_subpath: /
+media_subpath: /assets/img/QiangQuals
 ---
 # QIANGWANG Quals Smallcode - Writeup
 
@@ -60,7 +60,7 @@ Line-by-line (concise)
 
 We can write anything into 1.txt - no checks, no filters, no mercy. Linux doesn’t care about the .txt extension; it only sees the magic bytes. So we craft a fully valid ELF shared object (.so) with a sneaky ```__attribute__((constructor))``` payload, compile it, base64-encode it, and upload it as 1.txt. Then, using ```LD_PRELOAD=/var/www/html/1.txt```, we force the dynamic linker to load our library first on the next process spawn. The constructor fires instantly - shell dropped, game over.
 
-![alt text](/assets/img/QiangQuals/image-2.png)
+![alt text]({{ page.media_subpath }}/image-2.png)
 
 #### 1) Unauthenticated file write (file_put_contents)
 ```php
@@ -128,13 +128,13 @@ We start by uploading our malicious `.so` file as `/var/www/html/1.txt` using th
  curl -X POST --data-urlencode "context=$(cat tou.b64)" -d "env=LD_PRELOAD=/var/www/html/1.txt" http://127.0.0.1
 ```
 
-![alt text](/assets/img/QiangQuals/image-4.png)
+![alt text]({{ page.media_subpath }}/image-4.png)
 
 ## Shell Access
 
 After chaining the exploit, we visit [`http://127.0.0.1/2.php?c=ls`](http://127.0.0.1/2.php?c=ls) to confirm our webshell upload:
 
-![Webshell Confirmed](/assets/img/QiangQuals/image.png)
+![Webshell Confirmed]({{ page.media_subpath }}/image.png)
 
 **Success!** Our webshell is live — time to hunt for the flag.
 
@@ -144,11 +144,11 @@ After chaining the exploit, we visit [`http://127.0.0.1/2.php?c=ls`](http://127.
 
 We quickly spot `/flag.txt` in the root directory. But a simple `cat /flag.txt` returns... nothing:
 
-![](/assets/img/QiangQuals/image-1.png)
+![]({{ page.media_subpath }}/image-1.png)
 
 Let's dig deeper with `ls -la /flag.txt`:
 
-![](/assets/img/QiangQuals/image-3.png)
+![]({{ page.media_subpath }}/image-3.png)
 
 **Result:**  
 The flag file is owned by `root` and only readable by `root`. Our shell runs as `www-data`, so direct access is blocked.
@@ -171,13 +171,13 @@ find / -type f -user root -perm /4000 2>/dev/null
 
 This command lists all files owned by root with the SUID bit set. It's like searching for hidden treasure ; except the loot is root access.
 
-![SUID Binaries](image-5.png)
+![SUID Binaries]({{ page.media_subpath }}/image-5.png)
 
 ### Using GTFOBins
 
 [GTFOBins](https://gtfobins.github.io/) is a resource that documents ways to exploit common binaries for privilege escalation. After checking the list (and resisting the urge to shout "GTFO!"), we find that the `nl` binary can be used to read files as root.
 
-![nl GTFOBins](image-6.png)
+![nl GTFOBins]({{ page.media_subpath }}/image-6.png)
 
 ### Reading the Flag
 
@@ -189,7 +189,7 @@ LFILE=/flag.txt; nl -bn -w1 -s '' $LFILE
 
 Since `nl` is a SUID root binary, it allows us to read the contents of `/flag.txt`. Who knew line numbers could be so powerful?
 
-![Flag Output](image-7.png)
+![Flag Output]({{ page.media_subpath }}/image-7.png)
 
 **Flag:**  
 `flag{fake_flag_for_testing}`
