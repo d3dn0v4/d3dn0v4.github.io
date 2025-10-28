@@ -6,7 +6,6 @@ tags: [unauth file write,environment poisioning,hijacking]
 date: 2025-10-28
 media_subpath: /assets/img/QiangQuals
 ---
-# QIANGWANG Quals Smallcode - Writeup
 
 Last week, I participated in the QIANGWANG INTERNATIONAL QUALIFIER CTF and focused on the web challenges. In this writeup, I'll walk through my solution for the "SmallCode" task.
 
