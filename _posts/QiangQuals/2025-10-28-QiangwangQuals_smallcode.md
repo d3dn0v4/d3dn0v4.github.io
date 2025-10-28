@@ -4,7 +4,7 @@ title: "Qiangwang Quals - Smallcode"
 categories: [web, writeups , CTF]
 tags: [unauth file write,environment poisioning,hijacking]
 date: 2025-10-28
-media_subpath: /assets/img/QiangQuals
+media_subpath: /
 ---
 # QIANGWANG Quals Smallcode - Writeup
 
