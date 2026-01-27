@@ -49,7 +49,7 @@ In short: the app is a playground for XS-Leaks, XSS, and logic bugs. Now, let’
 My first instinct was to go for the classic: **XSS**. I could access the public challenge at [https://challenge-0126.intigriti.io/](https://challenge-0126.intigriti.io/), but quickly realized that the admin bot *the real target* was only authenticated on `http://localhost:{PORT}`. Because the session cookie was set with `SameSite=Lax`, my payloads wouldn’t work cross-origin. That meant I needed to bruteforce which port on localhost the admin bot was running on before I could proceed.
 <br>
 
-> ![alt text](image.png)
+> ![1st image](image.png)
 
 ## The Bruteforce Epiphany
 
