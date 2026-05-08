@@ -118,7 +118,7 @@ At this point, the victim is locked out, their profile is overwritten, and the a
 
 **Full Exploitation Video**
 
-<video controls src="../../../../../assets/img/ato-duplicate-signup/0508.mp4"></video>
+<video controls src="https://d3dn0v4.github.io/assets/img/ato-duplicate-signup/0508.mp4"></video>
 
 # Business Impact
 
