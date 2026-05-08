@@ -56,7 +56,7 @@ Together, these flaws allowed a single unauthenticated request to overwrite a vi
 
 ## How I Think the Backend Looked (Best Guess)
 
-```pseudo
+```js
 if request.path == "/api/sign-up/":
     user = User.get_or_create(email=request.email)  # should be create only
     user.first_name = request.first_name
