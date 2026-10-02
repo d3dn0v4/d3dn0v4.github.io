@@ -17,6 +17,16 @@ The name `1101` is binary for `13`, which is exactly the number of hints I ignor
 
 Here's the whole kill chain in one breath: the server seeds PHP's Mersenne Twister with `time()`, leaks the first output, names our uploaded file with the seventh output, then includes whatever file we uploaded. Meanwhile nginx blocks `/uploads/*.php` and the platform disables most command execution functions, though it won't tell us which ones until we earn `phpinfo()`. So we recover the PRNG state, use output #7 to pop `phpinfo()` and enumerate exactly which dangerous functions survived, predict the filename, upload a PHP payload that drops a shared object, and let `mail()` do the execution for us. Simple, right? It didn't feel simple at 3 AM.
 
+> **TL;DR (the technical version)**
+>
+> 1. `mt_srand(time())` seeds PHP's MT19937 with the current second. ±300 seconds of candidates, and the page echoes `mt_rand()` output #1 to confirm the exact seed.
+> 2. Send output #7 as `?help=<value>` and you get `phpinfo()`, which shows exactly which functions survived `disable_functions` (`mail()`, `putenv()`, `file_put_contents()`, `include()`).
+> 3. Output #7 of the upload request becomes the filename: `uploads/<name>.php`. nginx blocks `/uploads/*.php`, so execute it through the `?pinpaw=` include instead.
+> 4. `putenv("LD_PRELOAD=evil.so")` + `mail()` makes `sendmail` load our shared object. Its constructor calls native `system()`, where `disable_functions` has no jurisdiction.
+> 5. Reverse shell, `cat /flag_*.txt`, done.
+>
+> I love PHP. This challenge is a love letter. A passive-aggressive one.
+
 # The Files
 
 Players get exactly one file: the page itself. `highlight_file(__FILE__)` is kind enough to print `index.php` for us, so this is the entire challenge as far as we're concerned:
@@ -90,10 +100,6 @@ Read the list again. `system`, `exec`, `shell_exec`, `passthru`, `popen`, `proc_
 
 No `php.ini` was ever handed to us. `phpinfo()` is the recon step that turns "some functions might be disabled" into a list we can build an exploit on.
 
-> Fun fact from after the event: the backend `php.ini` literally ends with `; Allow putenv for LD_PRELOAD`, and `entrypoint.sh` prints `[*] Services started. Ready for LD_PRELOAD testing.` Players never see either, but if this is the author's way of hiding the ball, they were taping it to our forehead.
-
-> ![The author leaving the solution in the comments](image-9.png)
-
 ## nginx, The Wall Behind The Wall (Backend Context)
 
 Players never get this file either, but the restriction announces itself the moment we try to fetch our uploaded file directly: `GET /uploads/<name>.php` comes back `403`. Here's the backend rule that causes it:
@@ -128,13 +134,29 @@ RUN ... echo "SparkCTF{wh3r3_3vr3yth1ng_st4rt3d}" > /flag_$(head -c 16 /dev/uran
 
 `sendmail` installed for no apparent reason. Flag content fixed but filename randomized. Flag file created with default permissions, so `www-data` can read it once we have a shell. Everything we need.
 
-# Vulnerability 1: `mt_srand(time())` — The RNG Betrayal
+# Vulnerability 1: `mt_srand(time())` — The PRNG Betrayal (Yes, I Love PHP, That Is The Problem)
 
-Let's talk about the elephant in the room. Mersenne Twister (`MT19937`) is a beautiful PRNG. It has a period of 2^19937−1, it's fast, it's everywhere. It is also **completely deterministic** and, critically, **not cryptographically secure**. Give me the seed and I'll give you the future. Give me enough outputs and I'll give you the seed. Give me neither and... well, here the server does both.
+> **TL;DR:** the seed is `time()`. That is the vulnerability. An attacker brute forces a ±300 second window in a couple of seconds, and the page leaks output #1 to confirm the exact second. Output #7 becomes the upload filename, and from there it is a straight line to a reverse shell. This is what peak PHP performance looks like, and I say that with love.
 
-The seed is `time()`. Not `microtime()`, not a random salt, not anything that changes more than once per second. So the entire seed space for "right now" is roughly `now ± a few minutes` if we account for clock skew. Even without the leaked output, that's ~600 candidate seeds on a bad day. With a leaked first `mt_rand()` output, it's a filter that instantly tells us which one is correct.
+Let's talk about the elephant in the room. Mersenne Twister (`MT19937`) is a beautiful PRNG. It has a period of 2^19937−1, it's fast, it's everywhere, and it is **completely deterministic**: same seed, same stream, until the heat death of the universe. It is also famously **not cryptographically secure**. `mt_rand()` hands you 31 bits per call (`0` to `2147483647`), which is exactly enough bits to be useful and exactly too few to be safe.
 
-An important detail for the reproduction: `mt_rand()` returns a signed 31-bit value (`0` to `2147483647`), and since PHP 7.1 the implementation is the standard MT19937, so the sequence for a given seed matches across PHP 7.1-8.x. I reproduced it with PHP CLI locally, no Python reimplementation needed, no floating-point drama, no "my Python MT produces different numbers" bug hunting. Just:
+The seed is `time()`. Not `microtime()`, not a random salt, not anything that changes more than once per second. The seed space for "right now" is `now ± 300`, which is 601 candidates — that is not a keyspace, that is a queue at the bakery. And with output #1 leaked, even that collapses to one: replay every candidate seed, keep the one whose first `mt_rand()` matches the value on the page.
+
+Mechanically, for a seed `S`:
+
+- `mt_srand(S)` initializes the 624-word MT19937 state.
+- `mt_rand()` call #1 is the value the page echoes (`getmypid() . ':' . strval(mt_rand())`).
+- Calls #2-#6 are burned by the `for` loop.
+- Call #7 is the upload filename, `strval(mt_rand())`.
+
+### Why PHP Is My Favorite Language, Actually
+
+- `mt_rand()` is marketed as "random" but comes with a receipt anyone holding a watch can replay.
+- `disable_functions` is a bouncer who checks IDs at the front door while leaving the window open.
+- `mail()` is a remote code execution primitive wearing a postal uniform.
+- And `highlight_file(__FILE__)` hands the attacker the source for free, because why not. It is the most PHP thing in this entire challenge and I adore it.
+
+One detail that makes reproduction painless: since PHP 7.1 the implementation is the standard MT19937, so the sequence for a given seed is identical across PHP 7.1-8.x. No Python reimplementation, no floating-point drama, no "my Python MT produces different numbers" bug hunting. I just asked PHP, the language I love, to betray itself:
 
 ```bash
 php -r 'mt_srand(1790387045); echo mt_rand();'
@@ -202,9 +224,11 @@ Here's the magic. `putenv("LD_PRELOAD=/path/to/evil.so")` sets an environment va
 
 So the chain is: PHP executes our uploaded file → the file writes `evil.so` → `putenv("LD_PRELOAD=...")` → `mail()` forks `sendmail` → `sendmail` loads our library → reverse shell. The wall we spent the whole challenge respecting turns out to be a wall with a labelled door in it.
 
-> ![disable_functions vs mail() and putenv](image-4.png)
+> ![disable_functions vs mail() and putenv](image-4.png){: width="55%" }
 
-> ![Surprised Pikachu: I disabled every exec function](image-6.png)
+I disabled `system()`, `exec()`, `shell_exec()`, `passthru()`, `popen()`, `proc_open()`, the whole `pcntl_*` family and `dl` — defense in depth, obviously. Then I left `putenv()` and `mail()` enabled in the same config, which is the PHP equivalent of locking every door and leaving the keys in a bowl next to the window.
+
+> ![Surprised Pikachu: I disabled every exec function](image-6.png){: width="45%" }
 
 ## The payloads
 
@@ -454,7 +478,7 @@ python3 solve.py
 **Fun:** ★★★★★  
 **Learning Value:** ★★★★★
 
-This one was my favorite kind of web challenge: nothing exotic, just three mild mistakes stacked until they spell RCE. PRNG prediction, a path restriction bypassed by an `include`, and a `disable_functions` escape through a shared library. Each piece is a classic on its own, and the author clearly built it as a checklist of "things that look safe but aren't". My favorite touch is that `phpinfo()` is hidden behind the same PRNG prediction it protects: mandatory recon disguised as a bonus, and the only way to learn which functions survived.
+This one was my favorite kind of web challenge: nothing exotic, just three mild mistakes stacked until they spell RCE. PRNG prediction, a path restriction bypassed by an `include`, and a `disable_functions` escape through a shared library. Each piece is a classic on its own, and I clearly built it as a checklist of "things that look safe but aren't". My favorite touch is that `phpinfo()` is hidden behind the same PRNG prediction it protects: mandatory recon disguised as a bonus, and the only way to learn which functions survived.
 
 ---
 
