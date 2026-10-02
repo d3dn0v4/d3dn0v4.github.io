@@ -9,7 +9,7 @@ media_subpath: /assets/img/SparkCTF1101
 
 # Overview
 
-SparkCTF, challenge named **1101**. One PHP file that leaks itself with `highlight_file`, an nginx layer we never see, and a `php.ini` whose secrets have to be extracted from the running server. That's it. Nobody hands players a source bundle here, so this is not a "read the code" challenge, it's a "connect the dots" challenge, and the dots are leaked one at a time at runtime.
+Full disclosure before anything else: **I am the author of this challenge.** I, d3dn0v4, built **1101** for a local CTF, so this writeup is the author telling on himself. One PHP file that leaks itself with `highlight_file`, an nginx layer we never see, and a `php.ini` whose secrets have to be extracted from the running server. That's it. Nobody hands players a source bundle here, so this is not a "read the code" challenge, it's a "connect the dots" challenge, and the dots are leaked one at a time at runtime.
 
 The name `1101` is binary for `13`, which is exactly the number of hints I ignored before the whole thing clicked. Either that or it's a room number. We'll go with binary, it sounds smarter.
 
@@ -482,8 +482,20 @@ This one was my favorite kind of web challenge: nothing exotic, just three mild 
 
 ---
 
+# Author's Note
+
+I made this challenge. For a local CTF. Let me say it plainly so there is no confusion: **I, d3dn0v4, am the author of 1101**, and this writeup is me explaining my own puzzle.
+
+The goal was to show players how a few small PHP tweaks, each one harmless-looking on its own, chain together into full RCE, and to make them get there the old-fashioned way: open the docs, read what `mt_srand()`, `putenv()`, `mail()`, and `disable_functions` actually do, and understand *why* the chain works instead of just pasting a payload that some blog post handed them.
+
+Every piece here is documented behavior, not magic. The PRNG is predictable because the manual says so. `mail()` shells out to `sendmail` because the manual says so. The `include` is right there in the leaked source. I wanted the "aha" moment to come from actually understanding what each function does and why it works at the process level, so that the knowledge sticks long after the flag is submitted.
+
+That was the challenge: not trivia, not a guessing game, just PHP being PHP and players learning to read it properly.
+
+---
+
 ### Hashtags
 
 `#SparkCTF #WebSecurity #PHP #PRNG #MT19937 #LDPRELOAD #DisableFunctions #RCE #Nginx #CTF #Writeup`
 
-#### *— Written by d3dn0v4*
+#### *— Written by d3dn0v4, author of the challenge*
