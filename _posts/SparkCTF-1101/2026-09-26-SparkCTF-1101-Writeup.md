@@ -496,4 +496,3 @@ That was the challenge: not trivia, not a guessing game, just PHP being PHP and 
 
 `#SparkCTF #WebSecurity #PHP #PRNG #MT19937 #LDPRELOAD #DisableFunctions #RCE #Nginx #CTF #Writeup`
 
-#### *Written by d3dn0v4, author of the challenge*
