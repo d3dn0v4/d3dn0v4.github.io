@@ -13,7 +13,7 @@ Full disclosure before anything else: **I am the author of this challenge.** I, 
 
 The name `1101` is binary for `13`, which is exactly the number of hints I ignored before the whole thing clicked. Either that or it's a room number. We'll go with binary, it sounds smarter.
 
-> ![Expanding brain: the 1101 security model](image.png)
+<p align="center"><img src="image.png" alt="Expanding brain: the 1101 security model" width="75%"></p>
 
 Here's the whole kill chain in one breath: the server seeds PHP's Mersenne Twister with `time()`, leaks the first output, names our uploaded file with the seventh output, then includes whatever file we uploaded. Meanwhile nginx blocks `/uploads/*.php` and the platform disables most command execution functions, though it won't tell us which ones until we earn `phpinfo()`. So we recover the PRNG state, use output #7 to pop `phpinfo()` and enumerate exactly which dangerous functions survived, predict the filename, upload a PHP payload that drops a shared object, and let `mail()` do the execution for us. Simple, right? It didn't feel simple at 3 AM.
 
@@ -69,13 +69,13 @@ The backend (`php.ini`, `nginx.conf`, `Dockerfile`, `entrypoint.sh`) is never sh
 
 That's 25 lines and about four separate terrible decisions. Let's walk through them like a crime scene:
 
-- **Line 2, `mt_srand(time())`** — the seed is the current Unix timestamp in seconds. Not secret. Not even pretending to be secret. The security model of the whole challenge dies on this line.
-- **Line 3, `highlight_file(__FILE__)`** — free source disclosure. Thanks, I guess.
-- **Line 4, `echo getmypid() . ':' . strval(mt_rand())`** — the PID is cosmetic, but that `mt_rand()` is the **first output of the seeded generator**, printed to us every single request. That's our entry point into the state.
-- **Lines 5-7** — five burnt outputs. Warm-up laps.
-- **Line 8** — if `?help` equals the **seventh** output, `phpinfo()`. This is our only window into the server's PHP configuration, so it's not a gimmick, it's mandatory recon.
-- **Lines 9-15** — on file upload, the filename is `strval(mt_rand())`, the **seventh output** as well (no `help` param), saved to `uploads/<name>.php`, and the name is written to `uploads/.last`.
-- **Lines 16-24** — if `?pinpaw` equals the name in `.last`, the server **includes** `uploads/<name>.php` with output buffering, so the payload runs but prints nothing.
+- **Line 2, `mt_srand(time())`** - the seed is the current Unix timestamp in seconds. Not secret. Not even pretending to be secret. The security model of the whole challenge dies on this line.
+- **Line 3, `highlight_file(__FILE__)`** - free source disclosure. Thanks, I guess.
+- **Line 4, `echo getmypid() . ':' . strval(mt_rand())`** - the PID is cosmetic, but that `mt_rand()` is the **first output of the seeded generator**, printed to us every single request. That's our entry point into the state.
+- **Lines 5-7** - five burnt outputs. Warm-up laps.
+- **Line 8** - if `?help` equals the **seventh** output, `phpinfo()`. This is our only window into the server's PHP configuration, so it's not a gimmick, it's mandatory recon.
+- **Lines 9-15** - on file upload, the filename is `strval(mt_rand())`, the **seventh output** as well (no `help` param), saved to `uploads/<name>.php`, and the name is written to `uploads/.last`.
+- **Lines 16-24** - if `?pinpaw` equals the name in `.last`, the server **includes** `uploads/<name>.php` with output buffering, so the payload runs but prints nothing.
 
 ## The Wall You Can't See
 
@@ -134,13 +134,13 @@ RUN ... echo "SparkCTF{wh3r3_3vr3yth1ng_st4rt3d}" > /flag_$(head -c 16 /dev/uran
 
 `sendmail` installed for no apparent reason. Flag content fixed but filename randomized. Flag file created with default permissions, so `www-data` can read it once we have a shell. Everything we need.
 
-# Vulnerability 1: `mt_srand(time())` — The PRNG Betrayal (Yes, I Love PHP, That Is The Problem)
+# Vulnerability 1: `mt_srand(time())` - The PRNG Betrayal (Yes, I Love PHP, That Is The Problem)
 
 > **TL;DR:** the seed is `time()`. That is the vulnerability. An attacker brute forces a ±300 second window in a couple of seconds, and the page leaks output #1 to confirm the exact second. Output #7 becomes the upload filename, and from there it is a straight line to a reverse shell. This is what peak PHP performance looks like, and I say that with love.
 
 Let's talk about the elephant in the room. Mersenne Twister (`MT19937`) is a beautiful PRNG. It has a period of 2^19937−1, it's fast, it's everywhere, and it is **completely deterministic**: same seed, same stream, until the heat death of the universe. It is also famously **not cryptographically secure**. `mt_rand()` hands you 31 bits per call (`0` to `2147483647`), which is exactly enough bits to be useful and exactly too few to be safe.
 
-The seed is `time()`. Not `microtime()`, not a random salt, not anything that changes more than once per second. The seed space for "right now" is `now ± 300`, which is 601 candidates — that is not a keyspace, that is a queue at the bakery. And with output #1 leaked, even that collapses to one: replay every candidate seed, keep the one whose first `mt_rand()` matches the value on the page.
+The seed is `time()`. Not `microtime()`, not a random salt, not anything that changes more than once per second. The seed space for "right now" is `now ± 300`, which is 601 candidates - that is not a keyspace, that is a queue at the bakery. And with output #1 leaked, even that collapses to one: replay every candidate seed, keep the one whose first `mt_rand()` matches the value on the page.
 
 Mechanically, for a seed `S`:
 
@@ -171,7 +171,7 @@ for candidate in range(now - 300, now + 301):
         return candidate
 ```
 
-> ![This is fine, the seed is time()](image-2.png)
+<p align="center"><img src="image-2.png" alt="This is fine, the seed is time()" width="75%"></p>
 
 ### TL;DR for the people in the back: RNG vs PRNG
 
@@ -224,11 +224,11 @@ Here's the magic. `putenv("LD_PRELOAD=/path/to/evil.so")` sets an environment va
 
 So the chain is: PHP executes our uploaded file → the file writes `evil.so` → `putenv("LD_PRELOAD=...")` → `mail()` forks `sendmail` → `sendmail` loads our library → reverse shell. The wall we spent the whole challenge respecting turns out to be a wall with a labelled door in it.
 
-> ![disable_functions vs mail() and putenv](image-4.png){: width="55%" }
+<p align="center"><img src="image-4.png" alt="disable_functions vs mail() and putenv" width="70%"></p>
 
-I disabled `system()`, `exec()`, `shell_exec()`, `passthru()`, `popen()`, `proc_open()`, the whole `pcntl_*` family and `dl` — defense in depth, obviously. Then I left `putenv()` and `mail()` enabled in the same config, which is the PHP equivalent of locking every door and leaving the keys in a bowl next to the window.
+I disabled `system()`, `exec()`, `shell_exec()`, `passthru()`, `popen()`, `proc_open()`, the whole `pcntl_*` family and `dl` - defense in depth, obviously. Then I left `putenv()` and `mail()` enabled in the same config, which is the PHP equivalent of locking every door and leaving the keys in a bowl next to the window.
 
-> ![Surprised Pikachu: I disabled every exec function](image-6.png){: width="45%" }
+<p align="center"><img src="image-6.png" alt="Surprised Pikachu: I disabled every exec function" width="65%"></p>
 
 ## The payloads
 
@@ -270,7 +270,7 @@ One detail that confused me for a moment: after the include, `index.php` calls `
 
 # Exploitation, Step By Step
 
-## Step 1 — Recon
+## Step 1 - Recon
 
 Hit the page. `highlight_file` dumps the source, followed by the leak at the end:
 
@@ -278,11 +278,11 @@ Hit the page. `highlight_file` dumps the source, followed by the leak at the end
 28:1321046223
 ```
 
-> ![Source disclosure and PRNG leak](image-1.png)
+<p align="center"><img src="image-1.png" alt="Source disclosure and PRNG leak" width="100%"></p>
 
 `28` is the PHP-FPM worker PID (changes constantly, harmless), `1321046223` is output #1. From here we know exactly which clock second the generator was seeded with.
 
-## Step 2 — Predict output #7 and pop `phpinfo()` (required)
+## Step 2 - Predict output #7 and pop `phpinfo()` (required)
 
 Before we touch the shell, we want the live list of what PHP will actually let us call. Nobody hands players a `php.ini` here, so the `?help` branch is our only door: it compares the parameter against output #7 and calls `phpinfo()` if it matches. We can clone the generator, so we compute output #7 for the current second and fire:
 
@@ -303,9 +303,9 @@ Why a loop? Every request re-seeds with *its own* second, so we're predicting ou
 
 That last line *is* the exploit. `putenv()` lets us set `LD_PRELOAD`, and `mail()` spawns a process that will honor it. If phpinfo showed `putenv` disabled or `mail` missing, this would be a completely different writeup, so confirming it here is a must, not a maybe.
 
-> ![phpinfo reveals which functions survived](image-10.png)
+<p align="center"><img src="image-10.png" alt="phpinfo reveals which functions survived" width="100%"></p>
 
-## Step 3 — Upload first, predict second
+## Step 3 - Upload first, predict second
 
 This is the deterministic order I landed on. POST the payload, then **parse the leak out of the upload response**, because that leak belongs to the same request that names the file:
 
@@ -331,9 +331,9 @@ Which gives us exactly what we already know from our run:
 [+] uploads/185370868.php
 ```
 
-> ![Seed recovery and filename prediction](image-3.png)
+<p align="center"><img src="image-3.png" alt="Seed recovery and filename prediction" width="100%"></p>
 
-## Step 4 — Detonate via `?pinpaw=`
+## Step 4 - Detonate via `?pinpaw=`
 
 `uploads/185370868.php` is unreachable through nginx (403), so we knock on the include door:
 
@@ -343,9 +343,9 @@ curl -s "http://localhost:8080/?pinpaw=185370868"
 
 The response body is just the usual page (source + `PID:rand`), nothing from our payload appears, `ob_end_clean()` takes care of that. Behind the scenes the server writes `evil.so`, poisons `LD_PRELOAD`, calls `mail()`, and `sendmail` loads our library. If the listener was up, we're in.
 
-> ![Upload and include trigger](image-5.png)
+<p align="center"><img src="image-5.png" alt="Upload and include trigger" width="100%"></p>
 
-## Step 5 — Catch the shell and read the flag
+## Step 5 - Catch the shell and read the flag
 
 ```bash
 nc -lvnp 4444
@@ -358,7 +358,7 @@ www-data@d0c1e2f3a4b:/var/www/html$ cat /flag_*.txt
 SparkCTF{wh3r3_3vr3yth1ng_st4rt3d}
 ```
 
-> ![Reverse shell and flag](image-7.png)
+<p align="center"><img src="image-7.png" alt="Reverse shell and flag" width="100%"></p>
 
 **Flag:** `SparkCTF{wh3r3_3vr3yth1ng_st4rt3d}`
 
@@ -447,7 +447,7 @@ python3 solve.py
 
 > Local replay: `docker run -d --name 1101 -p 8080:80 1101`, which is what every `http://localhost:8080` URL here assumes. The reverse shell goes out to the ngrok endpoint compiled into `evil.c`, so the container reaches it over the internet; point that at your own ngrok host/port and recompile before testing.
 
-> ![It ain't much but it's honest work](image-8.png)
+<p align="center"><img src="image-8.png" alt="It ain't much but it's honest work" width="75%"></p>
 
 # Why The Chain Works
 
@@ -482,9 +482,7 @@ This one was my favorite kind of web challenge: nothing exotic, just three mild 
 
 ---
 
-# Author's Note
-
-I made this challenge. For a local CTF. Let me say it plainly so there is no confusion: **I, d3dn0v4, am the author of 1101**, and this writeup is me explaining my own puzzle.
+# Side note
 
 The goal was to show players how a few small PHP tweaks, each one harmless-looking on its own, chain together into full RCE, and to make them get there the old-fashioned way: open the docs, read what `mt_srand()`, `putenv()`, `mail()`, and `disable_functions` actually do, and understand *why* the chain works instead of just pasting a payload that some blog post handed them.
 
@@ -498,4 +496,4 @@ That was the challenge: not trivia, not a guessing game, just PHP being PHP and 
 
 `#SparkCTF #WebSecurity #PHP #PRNG #MT19937 #LDPRELOAD #DisableFunctions #RCE #Nginx #CTF #Writeup`
 
-#### *— Written by d3dn0v4, author of the challenge*
+#### *Written by d3dn0v4, author of the challenge*
